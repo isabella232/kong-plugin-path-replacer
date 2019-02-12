@@ -1,8 +1,8 @@
-# kong-plugin-boilerplate
+# Path replacer Kong plugin
 
 ## Install
  - clone the git repo
- - add luarock api key to environment variables (LUAROCKS_API_KEY)
+ - set the LUAROCKS_API_KEY environment variable (necessary for creating a release)
 
 ## Build local development environment
 
