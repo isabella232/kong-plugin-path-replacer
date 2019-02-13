@@ -29,7 +29,7 @@ test: ## Run tests
 	docker-compose down
 
 dev-env: ## Creates a service (myservice) and attaches a plugin to it (path-replacer)
-	bash -c "curl -i -X POST --url http://localhost:8001/services/ --data 'name=testapi' --data 'protocol=http' --data 'host=mockbin' --data 'path=/request'"
+	bash -c "curl -i -X POST --url http://localhost:8001/services/ --data 'name=testapi' --data 'url=http://mockbin:8080/request'"
 	bash -c "curl -i -X POST --url http://localhost:8001/services/testapi/routes/ --data 'paths[]=/'"
 	bash -c "curl -i -X POST --url http://localhost:8001/services/testapi/plugins/ --data 'name=path-replacer'"
 
