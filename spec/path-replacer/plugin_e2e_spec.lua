@@ -18,45 +18,100 @@ describe("PathReplacer", function()
     kong_helpers.stop_kong(nil)
   end)
 
-  before_each(function()
-    kong_helpers.db:truncate()
+  context("When placeholder is present in service url", function()
+    before_each(function()
+      kong_helpers.db:truncate()
 
-    service = kong_sdk.services:create({
-      name = "MockBin",
-      url = "http://mockbin:8080/request/~customer_id~"
-    })
+      service = kong_sdk.services:create({
+        name = "MockBin",
+        url = "http://mockbin:8080/request/~placeholder~"
+      })
 
-    kong_sdk.routes:create_for_service(service.id, "/test")
+      kong_sdk.routes:create_for_service(service.id, "/test")
+    end)
+
+    it("should require source_header and placeholder config parameters", function()
+      local success, response = pcall(function()
+        kong_sdk.plugins:create({
+          service_id = service.id,
+          name = "path-replacer",
+        })
+      end)
+
+      assert.is_equal(400, response.status)
+    end)
+
+    it("should interpolate the given header into the given placeholder", function()
+      kong_sdk.plugins:create({
+        service_id = service.id,
+        name = "path-replacer",
+        config = {
+          source_header = "X-Test-Header",
+          placeholder = "~placeholder~"
+        }
+      })
+
+      local response = send_request({
+        method = "GET",
+        path = "/test/some-resource-path",
+        headers = {
+          ["X-Test-Header"] = "112233"
+        }
+      })
+
+      assert.is_equal("http://0.0.0.0/request/112233/some-resource-path", response.body.url)
+    end)
+
+    it("should not interpolate when the given header is not present", function()
+      kong_sdk.plugins:create({
+        service_id = service.id,
+        name = "path-replacer",
+        config = {
+          source_header = "X-Test-Header",
+          placeholder = "~placeholder~"
+        }
+      })
+
+      local response = send_request({
+        method = "GET",
+        path = "/test/some-resource-path"
+      })
+
+      assert.is_equal("http://0.0.0.0/request/~placeholder~/some-resource-path", response.body.url)
+    end)
   end)
 
-  it("should interpolate the X-Suite-CustomerId header into the ~customer_id~ placeholder", function()
-    kong_sdk.plugins:create({
-      service_id = service.id,
-      name = "path-replacer"
-    })
+  context("When placeholder is not present in service url", function()
+    before_each(function()
+      kong_helpers.db:truncate()
 
-    local response = send_request({
-      method = "GET",
-      path = "/test/some-resource-path",
-      headers = {
-        ["X-Suite-CustomerId"] = "112233"
-      }
-    })
+      service = kong_sdk.services:create({
+        name = "MockBin",
+        url = "http://mockbin:8080/request/"
+      })
 
-    assert.is_equal("http://0.0.0.0/request/112233/some-resource-path", response.body.url)
-  end)
+      kong_sdk.routes:create_for_service(service.id, "/test")
+    end)
 
-  it("should not interpolate when X-Suite-CustomerId header is not present", function()
-    kong_sdk.plugins:create({
-      service_id = service.id,
-      name = "path-replacer"
-    })
+    it("should not explode", function()
+      kong_sdk.plugins:create({
+        service_id = service.id,
+        name = "path-replacer",
+        config = {
+          source_header = "X-Test-Header",
+          placeholder = "~placeholder~"
+        }
+      })
 
-    local response = send_request({
-      method = "GET",
-      path = "/test/some-resource-path"
-    })
+      local response = send_request({
+        method = "GET",
+        path = "/test/some-resource-path",
+        headers = {
+          ["X-Test-Header"] = "112233"
+        }
+      })
 
-    assert.is_equal("http://0.0.0.0/request/~customer_id~/some-resource-path", response.body.url)
+      assert.is_equal("http://0.0.0.0/request/some-resource-path", response.body.url)
+    end)
   end)
 end)
