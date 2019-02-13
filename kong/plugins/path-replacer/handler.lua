@@ -16,8 +16,12 @@ function PathReplacerHandler:access(conf)
   if not replacement then return end
 
   local upstream_uri = ngx.var.upstream_uri:gsub(conf.placeholder, replacement)
-  kong.service.request.set_path(upstream_uri)
 
+  if conf.log_only then
+    kong.service.request.set_header("X-Darklaunch-Replaced-Path", upstream_uri)
+  else
+    kong.service.request.set_path(upstream_uri)
+  end
 end
 
 return PathReplacerHandler

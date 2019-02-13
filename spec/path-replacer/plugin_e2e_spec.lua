@@ -114,4 +114,40 @@ describe("PathReplacer", function()
       assert.is_equal("http://0.0.0.0/request/some-resource-path", response.body.url)
     end)
   end)
+
+  context("When log_only is enabled", function()
+    before_each(function()
+      kong_helpers.db:truncate()
+
+      service = kong_sdk.services:create({
+        name = "MockBin",
+        url = "http://mockbin:8080/request/~placeholder~"
+      })
+
+      kong_sdk.routes:create_for_service(service.id, "/test")
+    end)
+
+    it("should set X-Darklaunch-Replaced-Path header instead of rewriting the path", function()
+      kong_sdk.plugins:create({
+        service_id = service.id,
+        name = "path-replacer",
+        config = {
+          source_header = "X-Test-Header",
+          placeholder = "~placeholder~",
+          log_only = true
+        }
+      })
+
+      local response = send_request({
+        method = "GET",
+        path = "/test/some-resource-path",
+        headers = {
+          ["X-Test-Header"] = "112233"
+        }
+      })
+
+      assert.is_equal("http://0.0.0.0/request/~placeholder~/some-resource-path", response.body.url)
+      assert.is_equal("/request/112233/some-resource-path", response.body.headers["x-darklaunch-replaced-path"])
+    end)
+  end)
 end)
