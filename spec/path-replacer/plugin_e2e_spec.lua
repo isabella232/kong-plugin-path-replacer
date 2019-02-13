@@ -1,137 +1,62 @@
-local helpers = require "spec.helpers"
 local cjson = require "cjson"
+local kong_helpers = require "spec.helpers"
+local test_helpers = require "kong_client.spec.test_helpers"
 
 describe("PathReplacer", function()
+
+  local kong_sdk, send_request, send_admin_request
+  local service
+
   setup(function()
-    helpers.start_kong({ custom_plugins = 'path-replacer' })
+    kong_helpers.start_kong({ custom_plugins = "path-replacer" })
+    kong_sdk = test_helpers.create_kong_client()
+    send_request = test_helpers.create_request_sender(kong_helpers.proxy_client())
+    send_admin_request = test_helpers.create_request_sender(kong_helpers.admin_client())
   end)
 
   teardown(function()
-    helpers.stop_kong(nil)
+    kong_helpers.stop_kong(nil)
   end)
 
   before_each(function()
-    helpers.db:truncate()
+    kong_helpers.db:truncate()
+
+    service = kong_sdk.services:create({
+      name = "MockBin",
+      url = "http://mockbin:8080/request/~customer_id~"
+    })
+
+    kong_sdk.routes:create_for_service(service.id, "/test")
   end)
 
-  it('should interpolate the X-Suite-CustomerId header into the ~customer_id~ placeholder', function()
-    local service_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services',
-      body = {
-        name = 'MockBin',
-        url = 'http://mockbin:8080/request/~customer_id~'
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
+  it("should interpolate the X-Suite-CustomerId header into the ~customer_id~ placeholder", function()
+    kong_sdk.plugins:create({
+      service_id = service.id,
+      name = "path-replacer"
+    })
 
-    local service_creation_data = cjson.decode(
-      assert.res_status(201, service_creation_call)
-    )
-
-    local service_id = service_creation_data.id
-
-    local route_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services/' .. service_id .. '/routes',
-      body = {
-        paths = {
-          '/test'
-        }
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
-
-    assert.res_status(201, route_creation_call)
-
-    local plugin_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services/' .. service_id .. '/plugins',
-      body = {
-        name = 'path-replacer',
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
-
-    assert.res_status(201, plugin_creation_call)
-
-    local client_call = assert(helpers.proxy_client():send({
-      method = 'GET',
-      path = '/test/some-resource-path',
+    local response = send_request({
+      method = "GET",
+      path = "/test/some-resource-path",
       headers = {
         ["X-Suite-CustomerId"] = "112233"
       }
-    }))
+    })
 
-    local client_response_data = cjson.decode(
-      assert.res_status(200, client_call)
-    )
-
-    assert.is_equal('http://0.0.0.0/request/112233/some-resource-path', client_response_data.url)
+    assert.is_equal("http://0.0.0.0/request/112233/some-resource-path", response.body.url)
   end)
 
-  it('should not interpolate when X-Suite-CustomerId header is not present', function()
-    local service_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services',
-      body = {
-        name = 'MockBin',
-        url = 'http://mockbin:8080/request/~customer_id~'
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
+  it("should not interpolate when X-Suite-CustomerId header is not present", function()
+    kong_sdk.plugins:create({
+      service_id = service.id,
+      name = "path-replacer"
+    })
 
-    local service_creation_data = cjson.decode(
-      assert.res_status(201, service_creation_call)
-    )
+    local response = send_request({
+      method = "GET",
+      path = "/test/some-resource-path"
+    })
 
-    local service_id = service_creation_data.id
-
-    local route_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services/' .. service_id .. '/routes',
-      body = {
-        paths = {
-          '/test'
-        }
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
-
-    assert.res_status(201, route_creation_call)
-
-    local plugin_creation_call = assert(helpers.admin_client():send({
-      method = 'POST',
-      path = '/services/' .. service_id .. '/plugins',
-      body = {
-        name = 'path-replacer',
-      },
-      headers = {
-        ['Content-Type'] = 'application/json'
-      }
-    }))
-
-    assert.res_status(201, plugin_creation_call)
-
-    local client_call = assert(helpers.proxy_client():send({
-      method = 'GET',
-      path = '/test/some-resource-path'
-    }))
-
-    local client_response_data = cjson.decode(
-      assert.res_status(200, client_call)
-    )
-
-    assert.is_equal('http://0.0.0.0/request/~customer_id~/some-resource-path', client_response_data.url)
+    assert.is_equal("http://0.0.0.0/request/~customer_id~/some-resource-path", response.body.url)
   end)
 end)
