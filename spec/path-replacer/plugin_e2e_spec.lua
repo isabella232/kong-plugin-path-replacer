@@ -121,7 +121,7 @@ describe("PathReplacer", function()
 
       service = kong_sdk.services:create({
         name = "MockBin",
-        url = "http://mockbin:8080/request/~placeholder~"
+        url = "http://mockbin:8080/request/"
       })
 
       kong_sdk.routes:create_for_service(service.id, "/test")
@@ -134,7 +134,8 @@ describe("PathReplacer", function()
         config = {
           source_header = "X-Test-Header",
           placeholder = "~placeholder~",
-          log_only = true
+          log_only = true,
+          darklaunch_url = "/some-resource/some-item/~placeholder~/end"
         }
       })
 
@@ -146,8 +147,8 @@ describe("PathReplacer", function()
         }
       })
 
-      assert.is_equal("http://0.0.0.0/request/~placeholder~/some-resource-path", response.body.url)
-      assert.is_equal("/request/112233/some-resource-path", response.body.headers["x-darklaunch-replaced-path"])
+      assert.is_equal("http://0.0.0.0/request/some-resource-path", response.body.url)
+      assert.is_equal("/some-resource/some-item/112233/end", response.body.headers["x-darklaunch-replaced-path"])
     end)
   end)
 end)
