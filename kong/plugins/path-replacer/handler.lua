@@ -2,7 +2,7 @@ local BasePlugin = require "kong.plugins.base_plugin"
 
 local PathReplacerHandler = BasePlugin:extend()
 
-PathReplacerHandler.PRIORITY = 2000
+PathReplacerHandler.PRIORITY = 801
 
 function PathReplacerHandler:new()
   PathReplacerHandler.super.new(self, "path-replacer")
